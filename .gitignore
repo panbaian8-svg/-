@@ -1,40 +1,31 @@
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.env
-frontend/.vite/
+# 敏感信息 - 绝不上传
+.env
+.env.*
+*.env.local
+.env.docker
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# 依赖 - 可重新安装
+node_modules/
 venv/
-ENV/
-env/
-*.egg-info/
-dist/
-build/
+__pycache__/
+*.pyc
+*.pyo
+
+# 数据 - 临时文件
+backend/data/
+backend/test.pdf
+backend/test.txt
 
 # IDE
+.DS_Store
 .vscode/
 .idea/
 *.swp
-*.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# 前端构建
+frontend/.vite/
+frontend/dist/
+frontend/package-lock.json
 
-# Environment
-.env
-!.env.example
-!.env.docker
-
-# Data
-data/chroma/
-uploads/
-
-# Logs
+# 日志
 *.log
