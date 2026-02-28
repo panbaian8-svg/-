@@ -63,6 +63,31 @@ class DeepSeekService:
             traceback.print_exc()
             return self._get_mock_response(user_prompt)
 
+    def answer_question(self, question: str, context: str, **kwargs) -> Dict[str, Any]:
+        """
+        Answer a question based on context
+
+        Args:
+            question: The question to answer
+            context: Context/retrieved information to base answer on
+
+        Returns:
+            Answer and sources
+        """
+        system_prompt = """你是一个智能助教，擅长根据提供的教材内容回答学生的问题。
+
+请根据以下上下文内容回答用户的问题。
+如果上下文中没有相关信息，请说明"我没有在教材中找到相关内容"。"""
+
+        user_prompt = f"上下文：\n{context}\n\n问题：{question}"
+
+        answer = self.chat(system_prompt, user_prompt)
+
+        return {
+            "answer": answer,
+            "sources": [{"content": context[:500] if context else ""}]
+        }
+
     def extract_knowledge(self, text: str) -> Dict[str, Any]:
         """
         Extract structured knowledge from text

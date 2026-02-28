@@ -55,6 +55,7 @@ class MiniMaxService(AIProvider):
 
             payload = {
                 "model": self.model,
+                "group_id": self.group_id,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -67,10 +68,32 @@ class MiniMaxService(AIProvider):
             response.raise_for_status()
 
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+
+            # 检查 API 返回的错误
+            if "base_resp" in result:
+                status_code = result.get("base_resp", {}).get("status_code")
+                status_msg = result.get("base_resp", {}).get("status_msg", "")
+                if status_code or status_msg:
+                    error_msg = f"{status_msg} (code: {status_code})"
+                    # 检查余额不足
+                    if "insufficient" in error_msg.lower() or "balance" in error_msg.lower() or status_code == 1008:
+                        return "⚠️ MiniMax 账户余额不足，请充值或切换到 DeepSeek"
+                    raise Exception(f"MiniMax API error: {error_msg}")
+
+            # 检查响应是否有效
+            if result.get("choices") and len(result["choices"]) > 0:
+                return result["choices"][0]["message"]["content"]
+            else:
+                # API 返回了错误
+                status_msg = result.get("base_resp", {}).get("status_msg", "Unknown error")
+                raise Exception(f"MiniMax API error: {status_msg}")
 
         except Exception as e:
             print(f"[MiniMax] API error: {e}")
+            # 检查是否是余额不足
+            error_msg = str(e)
+            if "insufficient balance" in error_msg or "1008" in error_msg or "balance" in error_msg.lower():
+                return "⚠️ MiniMax 账户余额不足，请充值或切换到 DeepSeek"
             traceback.print_exc()
             return self._get_mock_response(user_prompt)
 
@@ -147,19 +170,82 @@ class MiniMaxService(AIProvider):
         Returns:
             答案和来源
         """
-        system_prompt = """你是一个智能助教，擅长根据提供的教材内容回答学生的问题。
+        if self.mock_mode:
+            return {
+                "answer": "MiniMax Mock: 这是问答功能的模拟响应",
+                "sources": [{"content": context[:500] if context else ""}]
+            }
+
+        try:
+            url = f"{self.base_url}/text/chatcompletion_v2"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            system_prompt = """你是一个智能助教，擅长根据提供的教材内容回答学生的问题。
 
 请根据以下上下文内容回答用户的问题。
 如果上下文中没有相关信息，请说明"我没有在教材中找到相关内容"。"""
 
-        user_prompt = f"上下文：\n{context}\n\n问题：{question}"
+            user_prompt = f"上下文：\n{context}\n\n问题：{question}"
 
-        answer = self.generate_text(system_prompt, user_prompt)
+            payload = {
+                "model": self.model,
+                "group_id": self.group_id,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
 
-        return {
-            "answer": answer,
-            "sources": [{"content": context[:500]}]
-        }
+            response = httpx.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # 检查 API 返回的错误
+            if "base_resp" in result:
+                status_code = result.get("base_resp", {}).get("status_code")
+                status_msg = result.get("base_resp", {}).get("status_msg", "")
+                if status_code or status_msg:
+                    error_msg = f"{status_msg} (code: {status_code})"
+                    # 检查余额不足
+                    if "insufficient" in error_msg.lower() or "balance" in error_msg.lower() or status_code == 1008:
+                        return {
+                            "answer": "⚠️ MiniMax 账户余额不足 (insufficient balance)，请充值或切换到 DeepSeek",
+                            "sources": []
+                        }
+                    return {
+                        "answer": f"MiniMax API 错误: {error_msg}",
+                        "sources": []
+                    }
+
+            # 正常解析响应
+            answer = result["choices"][0]["message"]["content"]
+
+            return {
+                "answer": answer,
+                "sources": [{"content": context[:500] if context else ""}]
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[MiniMax] answer_question error: {error_msg}")
+            traceback.print_exc()
+            # 检查是否是余额不足
+            if "insufficient balance" in error_msg.lower() or "1008" in error_msg or "balance" in error_msg.lower():
+                return {
+                    "answer": "⚠️ MiniMax 账户余额不足 (insufficient balance)，请充值或切换到 DeepSeek",
+                    "sources": []
+                }
+            # 检查是否是连接/API 错误
+            return {
+                "answer": f"⚠️ MiniMax 服务暂时不可用: {error_msg[:100]}",
+                "sources": []
+            }
 
     def support_ocr(self) -> bool:
         """MiniMax 支持 OCR"""
@@ -195,6 +281,7 @@ class MiniMaxService(AIProvider):
 
             payload = {
                 "model": self.model,
+                "group_id": self.group_id,
                 "messages": [
                     {
                         "role": "user",
@@ -264,6 +351,7 @@ class MiniMaxService(AIProvider):
 
             payload = {
                 "model": self.model,
+                "group_id": self.group_id,
                 "messages": [
                     {
                         "role": "user",

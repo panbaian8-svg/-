@@ -10,6 +10,36 @@ from services.document_service import DocumentService
 from services.ai_provider import AIServiceSelector
 from app.config import AI_PROVIDER
 
+# 嵌入模型 - 使用轻量级模型
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
+class EmbeddingService:
+    """本地嵌入服务"""
+
+    def __init__(self):
+        print(f"[Embedding] Loading model: {EMBEDDING_MODEL}...")
+        from sentence_transformers import SentenceTransformer
+        self.model = SentenceTransformer(EMBEDDING_MODEL)
+        print("[Embedding] Model loaded!")
+
+    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        """将文本转换为嵌入向量"""
+        embeddings = self.model.encode(texts, convert_to_numpy=True)
+        return embeddings.tolist()
+
+
+# 全局嵌入服务实例
+_embedding_service = None
+
+
+def get_embedding_service() -> EmbeddingService:
+    """获取嵌入服务单例"""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    return _embedding_service
+
 
 class RAGService:
     """Service for RAG-based question answering"""
@@ -87,10 +117,9 @@ class RAGService:
         # Chunk text
         chunks = self.document_service.chunk_text(text, chunk_size, overlap)
 
-        # TODO: Generate embeddings with DeepSeek
-        # For now, use random embeddings (placeholder)
-        import numpy as np
-        embeddings = [[float(i) for i in np.random.rand(1536)] for _ in chunks]
+        # 生成真实嵌入向量
+        embedding_service = get_embedding_service()
+        embeddings = embedding_service.embed_texts(chunks)
 
         # Add to collection
         collection = self.collections[document_id]
@@ -122,9 +151,9 @@ class RAGService:
 
         collection = self.collections[document_id]
 
-        # TODO: Generate query embedding
-        import numpy as np
-        query_embedding = [float(i) for i in np.random.rand(1536)]
+        # 生成查询嵌入向量
+        embedding_service = get_embedding_service()
+        query_embedding = embedding_service.embed_texts([query])[0]
 
         results = collection.query(
             query_embeddings=[query_embedding],

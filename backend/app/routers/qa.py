@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
+import traceback
 from app.routers.documents import documents_db
 from app.services import rag_service
 
@@ -66,8 +67,10 @@ async def ask_question(request: AskRequest):
 
     except Exception as e:
         # Fallback to mock response if RAG fails
+        print(f"[QA Error] {str(e)}")
+        traceback.print_exc()
         return AskResponse(
-            answer="抱歉，处理您的问题时遇到了一些问题。请稍后重试。",
+            answer=f"抱歉，处理您的问题时遇到了一些问题: {str(e)[:50]}",
             sources=[],
             related_topics=[]
         )
