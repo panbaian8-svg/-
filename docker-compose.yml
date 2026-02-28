@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_GROUP_ID=${MINIMAX_GROUP_ID}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-abab5.5-chat}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.chat/v1}
+      - AI_PROVIDER=${AI_PROVIDER:-deepseek}
+      - MOCK_MODE=${MOCK_MODE:-false}
+    volumes:
+      - ./backend/data:/app/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
