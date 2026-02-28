@@ -1,3 +1,9 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.vite/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -24,6 +30,7 @@ Thumbs.db
 # Environment
 .env
 !.env.example
+!.env.docker
 
 # Data
 data/chroma/
@@ -31,8 +38,3 @@ uploads/
 
 # Logs
 *.log
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.env
