@@ -259,7 +259,7 @@ function ChatPage() {
         </header>
 
         {/* Chat Messages */}
-        <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+        <ScrollArea className="flex-1 p-6">
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((message) => (
               <div
