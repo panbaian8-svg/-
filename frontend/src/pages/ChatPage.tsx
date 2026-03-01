@@ -10,12 +10,19 @@ import {
   Bot,
   User,
   Image as ImageIcon,
-  Globe
+  Globe,
+  Cpu
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import api from '../api/client';
 
 interface Message {
@@ -77,6 +84,10 @@ const translations = {
     uploadImage: '上传图片',
     disclaimer: 'AI 回答基于《高中数学必修一》教材内容',
     deepseekOnline: 'DeepSeek 在线',
+    minimaxOnline: 'MiniMax 在线',
+    switchModel: '切换模型',
+    deepseek: 'DeepSeek',
+    minimax: 'MiniMax',
   },
   en: {
     knowledgeBase: 'Knowledge Base',
@@ -90,20 +101,41 @@ const translations = {
     uploadImage: 'Upload Image',
     disclaimer: 'AI responses based on "High School Mathematics Compulsory 1"',
     deepseekOnline: 'DeepSeek Online',
+    minimaxOnline: 'MiniMax Online',
+    switchModel: 'Switch Model',
+    deepseek: 'DeepSeek',
+    minimax: 'MiniMax',
   }
 };
 
 function ChatPage() {
-  const [language, setLanguage] = useState<'cn' | 'en'>('cn');
+  const [language, setLanguage] = useState<'cn' | 'en'>('en');
   const [messages, setMessages] = useState<Message[]>(initialMessagesCN);
   const [inputValue, setInputValue] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentDocument, setCurrentDocument] = useState<string>('4ec6fb98-1bef-476e-bcba-bda5394c059f'); // Default document
+  const [currentDocument, setCurrentDocument] = useState<string>('');
+  const [currentProvider, setCurrentProvider] = useState<string>('deepseek');
+  const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const t = translations[language];
+
+  // Fetch available documents on mount
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        const response = await api.get('/documents/');
+        if (response.data && response.data.length > 0) {
+          setCurrentDocument(response.data[0].document_id);
+        }
+      } catch (err) {
+        console.error('Failed to fetch documents:', err);
+      }
+    };
+    fetchDocuments();
+  }, []);
 
   useEffect(() => {
     setMessages(language === 'cn' ? initialMessagesCN : initialMessagesEN);
@@ -119,6 +151,27 @@ function ChatPage() {
     setLanguage(prev => prev === 'cn' ? 'en' : 'cn');
   };
 
+  const switchProvider = async (provider: string) => {
+    setIsSwitchingProvider(true);
+    try {
+      await api.post('/knowledge/provider/switch', { provider });
+      setCurrentProvider(provider);
+      // Add system message about the switch
+      const systemMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: language === 'cn'
+          ? `已切换到 ${provider === 'deepseek' ? 'DeepSeek' : 'MiniMax'} 模型`
+          : `Switched to ${provider === 'deepseek' ? 'DeepSeek' : 'MiniMax'} model`,
+      };
+      setMessages(prev => [...prev, systemMessage]);
+    } catch (error) {
+      console.error('Failed to switch provider:', error);
+    } finally {
+      setIsSwitchingProvider(false);
+    }
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -132,6 +185,19 @@ function ChatPage() {
 
   const handleSend = async () => {
     if (!inputValue.trim() && !uploadedImage) return;
+
+    // Check if document is available
+    if (!currentDocument) {
+      const aiResponse: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: language === 'cn'
+          ? '请先在知识库中上传学习资料，然后选择该资料进行问答。'
+          : 'Please upload learning materials in the Knowledge Base first, then select it for Q&A.',
+      };
+      setMessages(prev => [...prev, aiResponse]);
+      return;
+    }
 
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -157,7 +223,9 @@ function ChatPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: response.data.answer || '抱歉，我无法回答这个问题。',
-        source: response.data.provider ? `基于 ${response.data.provider} 回答` : '基于文档回答',
+        source: response.data.source_type === 'ai_knowledge'
+          ? (language === 'cn' ? '基于 AI 自身知识回答（非用户资料）' : 'Based on AI knowledge (not from your materials)')
+          : (response.data.provider ? `基于 ${response.data.provider} 回答` : '基于文档回答'),
       };
       setMessages(prev => [...prev, aiResponse]);
     } catch (error: any) {
@@ -196,7 +264,6 @@ function ChatPage() {
             </div>
             <div>
               <h1 className="font-bold text-slate-800 text-lg">StudyFlow AI</h1>
-              <p className="text-xs text-slate-500">{t.deepseekOnline}</p>
             </div>
           </div>
         </div>
@@ -251,10 +318,37 @@ function ChatPage() {
               <Globe className="w-4 h-4" />
               <span className="font-medium">{language === 'cn' ? '中文' : 'EN'}</span>
             </Button>
-            <Badge variant="outline" className="text-slate-500 border-slate-300">
-              <Bot className="w-3 h-3 mr-1" />
-              {t.aiOnline}
-            </Badge>
+
+            {/* Model Selector */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 text-slate-600 border-slate-300 hover:bg-slate-50"
+                  disabled={isSwitchingProvider}
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span className="font-medium">{currentProvider === 'deepseek' ? 'DeepSeek' : 'MiniMax'}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => switchProvider('deepseek')}
+                  className={currentProvider === 'deepseek' ? 'bg-accent' : ''}
+                >
+                  <Bot className="w-4 h-4 mr-2" />
+                  {t.deepseek}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => switchProvider('minimax')}
+                  className={currentProvider === 'minimax' ? 'bg-accent' : ''}
+                >
+                  <Bot className="w-4 h-4 mr-2" />
+                  {t.minimax}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 

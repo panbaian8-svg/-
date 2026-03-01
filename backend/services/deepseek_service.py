@@ -88,6 +88,36 @@ class DeepSeekService:
             "sources": [{"content": context[:500] if context else ""}]
         }
 
+    def answer_question_without_context(self, question: str, **kwargs) -> Dict[str, Any]:
+        """
+        Answer a question when no relevant content is found in knowledge base
+        The AI will answer based on its own knowledge but must indicate the source
+
+        Args:
+            question: The question to answer
+
+        Returns:
+            Answer with source indication
+        """
+        system_prompt = """你是一个智能助教，擅长回答学生的学习问题。
+
+重要提示：
+1. 用户的问题没有在其上传的学习资料中找到相关内容
+2. 你需要基于自己的知识来回答这个问题
+3. 在回答时，你必须明确告诉用户：这个答案是基于 AI 自身的知识库，而非用户的资料
+4. 回答要准确、专业，适合学生学习
+
+请直接回答用户的问题，不要重复上述提示。"""
+
+        user_prompt = f"问题：{question}"
+
+        answer = self.chat(system_prompt, user_prompt)
+
+        return {
+            "answer": answer,
+            "sources": []
+        }
+
     def extract_knowledge(self, text: str) -> Dict[str, Any]:
         """
         Extract structured knowledge from text

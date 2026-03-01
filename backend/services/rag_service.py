@@ -192,14 +192,59 @@ class RAGService:
         # Retrieve relevant chunks
         sources = self.search(document_id, question, top_k)
 
+        # DEBUG: Log search results
+        print(f"[RAG] Search sources: {len(sources)} found")
+        for s in sources:
+            print(f"  - distance={s.get('distance')}, content={s.get('content', '')[:50]}...")
+
+        # Use distance threshold to determine if content is relevant
+        # For cosine distance in ChromaDB: 0 = identical, 2 = opposite
+        # Distance < 1.85 allows more content through (tested: related=1.78, unrelated=1.91)
+        relevant_sources = [s for s in sources if s.get("distance", 2) < 1.85]
+
+        # Extract page numbers from relevant sources only
+        page_numbers = []
+        for source in relevant_sources:
+            # Try to extract page number from chunk metadata
+            chunk_id = source.get("chunk_id", "")
+            # Common patterns: P23, page_23, 第23页, etc.
+            import re
+            page_match = re.search(r'[Pp]?[._]?(\d+)|第(\d+)页', chunk_id)
+            if page_match:
+                page_num = page_match.group(1) or page_match.group(2)
+                if page_num and page_num not in page_numbers:
+                    page_numbers.append(page_num)
+
+        # If no relevant content found in knowledge base, still call AI but with different prompt
+        if not relevant_sources:
+            # Call AI with prompt indicating no relevant content in knowledge base
+            result = self.ai_service.answer_question_without_context(question)
+            # Do NOT append reference info when no relevant content found
+            return {
+                "answer": result.get("answer", ""),
+                "sources": [],
+                "provider": self.provider,
+                "source_type": "ai_knowledge",  # Mark as from AI's own knowledge
+                "page_numbers": []
+            }
+
         # Combine sources into context
-        context = "\n\n".join([s["content"] for s in sources])
+        context = "\n\n".join([s["content"] for s in relevant_sources])
 
         # Generate answer with configured AI service
         result = self.ai_service.answer_question(question, context)
 
+        # Append source information to answer only when relevant content found
+        answer = result.get("answer", "")
+        if page_numbers:
+            answer += f"\n\n📖 **参考来源**："
+            for i, page in enumerate(page_numbers[:3]):  # Limit to 3 sources
+                answer += f"\n- 第 {page} 页"
+
         return {
-            "answer": result.get("answer", ""),
-            "sources": sources,
-            "provider": self.provider
+            "answer": answer,
+            "sources": relevant_sources,
+            "provider": self.provider,
+            "source_type": "knowledge_base",
+            "page_numbers": page_numbers
         }

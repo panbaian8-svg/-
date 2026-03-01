@@ -19,6 +19,7 @@ class AskResponse(BaseModel):
     sources: List[dict]
     related_topics: List[str]
     provider: str = "deepseek"
+    source_type: str = "knowledge_base"  # "knowledge_base" or "ai_knowledge"
 
 
 @router.post("/ask", response_model=AskResponse)
@@ -62,7 +63,8 @@ async def ask_question(request: AskRequest):
             answer=result["answer"],
             sources=result["sources"],
             related_topics=related_topics if related_topics else ["相关知识点"],
-            provider=result.get("provider", "deepseek")
+            provider=result.get("provider", "deepseek"),
+            source_type=result.get("source_type", "knowledge_base")
         )
 
     except Exception as e:

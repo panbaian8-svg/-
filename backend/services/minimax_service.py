@@ -247,6 +247,91 @@ class MiniMaxService(AIProvider):
                 "sources": []
             }
 
+    def answer_question_without_context(self, question: str, **kwargs) -> Dict[str, Any]:
+        """
+        当知识库中没有相关内容时，基于AI自身知识回答
+
+        Args:
+            question: 问题
+
+        Returns:
+            答案
+        """
+        if self.mock_mode:
+            return {
+                "answer": "MiniMax Mock: 用户资料中未找到相关内容，基于AI知识回答",
+                "sources": []
+            }
+
+        try:
+            url = f"{self.base_url}/text/chatcompletion_v2"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            system_prompt = """你是一个智能助教，擅长回答学生的学习问题。
+
+重要提示：
+1. 用户的问题没有在其上传的学习资料中找到相关内容
+2. 你需要基于自己的知识来回答这个问题
+3. 在回答时，你必须明确告诉用户：这个答案是基于 AI 自身的知识库，而非用户的资料
+4. 回答要准确、专业，适合学生学习
+
+请直接回答用户的问题，不要重复上述提示。"""
+
+            user_prompt = f"问题：{question}"
+
+            payload = {
+                "model": self.model,
+                "group_id": self.group_id,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+
+            response = httpx.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # 检查 API 返回的错误
+            if "base_resp" in result:
+                status_code = result.get("base_resp", {}).get("status_code")
+                status_msg = result.get("base_resp", {}).get("status_msg", "")
+                if status_code or status_msg:
+                    error_msg = f"{status_msg} (code: {status_code})"
+                    return {
+                        "answer": f"MiniMax API 错误: {error_msg}",
+                        "sources": []
+                    }
+
+            # 正常解析响应
+            answer = result["choices"][0]["message"]["content"]
+
+            return {
+                "answer": answer,
+                "sources": []
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[MiniMax] answer_question_without_context error: {error_msg}")
+            # 检查是否是余额不足
+            if "insufficient balance" in error_msg.lower() or "1008" in error_msg or "balance" in error_msg.lower():
+                return {
+                    "answer": "⚠️ MiniMax 账户余额不足 (insufficient balance)，请充值或切换到 DeepSeek",
+                    "sources": []
+                }
+            # 检查是否是连接/API 错误
+            return {
+                "answer": f"⚠️ MiniMax 服务暂时不可用: {error_msg[:100]}",
+                "sources": []
+            }
+
     def support_ocr(self) -> bool:
         """MiniMax 支持 OCR"""
         return True
